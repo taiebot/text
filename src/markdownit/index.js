@@ -5,7 +5,7 @@
 
 import markdownitMentions from '@quartzy/markdown-it-mentions'
 import MarkdownIt from 'markdown-it'
-import frontMatter from 'markdown-it-front-matter'
+import frontmatter from './frontmatter.ts'
 import implicitFigures from 'markdown-it-image-figures'
 import mark from 'markdown-it-mark'
 import multimdTable from 'markdown-it-multimd-table'
@@ -24,7 +24,7 @@ const markdownit = MarkdownIt('commonmark', { html: false, breaks: false })
 	.enable('strikethrough')
 	.enable('table')
 	.use(taskLists, { enable: true, labelAfter: true })
-	.use(frontMatter, (fm) => {})
+	.use(frontmatter)
 	.use(splitMixedLists) // needs task Lists to be used first.
 	.use(underline)
 	.use(hardbreak)
