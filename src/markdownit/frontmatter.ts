@@ -13,79 +13,89 @@ import type StateBlock from 'markdown-it/lib/rules_block/state_block.mjs'
 import yaml from 'js-yaml'
 
 export default function frontmatter(md: MarkdownIt) {
-    md.block.ruler.before(
-        'fence',
-        'front_matter',
-        (state: StateBlock, startLine: number, endLine: number, silent: boolean) => {
-            const start = state.bMarks[startLine] + state.tShift[startLine]
-            const max = state.eMarks[startLine]
-            const line = state.src.slice(start, max).trim()
+	md.block.ruler.before(
+		'fence',
+		'front_matter',
+		(
+			state: StateBlock,
+			startLine: number,
+			endLine: number,
+			silent: boolean,
+		) => {
+			// Front matter must start at top of document
+			if (startLine !== 0) {
+				return false
+			}
 
-            // Only accept --- or *** or ___ as front matter fences
-            if (!/^(-{3,}|\*{3,}|_{3,})$/.test(line)) {
-                return false
-            }
+			const start = state.bMarks[startLine] + state.tShift[startLine]
+			const max = state.eMarks[startLine]
+			const line = state.src.slice(start, max).trim()
 
-            // Must be at top of document
-            if (startLine !== 0) {
-                return false
-            }
+			// Only allow YAML-style fences
+			if (!/^(-{3,}|\*{3,}|_{3,})$/.test(line)) {
+				return false
+			}
 
-            let nextLine = startLine + 1
-            const contentLines: string[] = []
+			let nextLine = startLine + 1
+			const contentLines: string[] = []
 
-            for (; nextLine < endLine; nextLine++) {
-                const s = state.bMarks[nextLine] + state.tShift[nextLine]
-                const e = state.eMarks[nextLine]
-                const text = state.src.slice(s, e).trim()
+			for (; nextLine < endLine; nextLine++) {
+				const s = state.bMarks[nextLine] + state.tShift[nextLine]
+				const e = state.eMarks[nextLine]
+				const text = state.src.slice(s, e)
 
-                // Closing fence
-                if (/^(-{3,}|\*{3,}|_{3,})$/.test(text)) {
-                    break
-                }
+				// Closing fence
+				if (/^(-{3,}|\*{3,}|_{3,})\s*$/.test(text.trim())) {
+					break
+				}
 
-                if (text.length > 0) {
-                    contentLines.push(text)
-                }
-            }
+				contentLines.push(text)
+			}
 
-            // No closing fence → not front matter
-            if (nextLine >= endLine) {
-                return false
-            }
+			// No closing fence
+			if (nextLine >= endLine) {
+				return false
+			}
 
-            const content = contentLines.join('\n')
+			const content = contentLines.join('\n').trim()
 
-            // Reject checkboxes, lists, etc.
-            if (
-                content.match(/^[-*]\s+
+			// Reject markdown lists / task lists
+			const hasMarkdownLists =
+				/^[-*]\s+\[[ xX]\]\s+/m.test(content) || // task list
+				/^[-*]\s+/m.test(content) || // bullet list
+				/^\d+\.\s+/m.test(content) // numbered list
 
-\[.\]
+			if (hasMarkdownLists) {
+				return false
+			}
 
-/m) ||   // checkboxes
-                content.match(/^[-*]\s+/m) ||        // bullet lists
-                content.match(/^\d+\.\s+/m)          // numbered lists
-            ) {
-                return false
-            }
+			// Validate YAML
+			try {
+				const parsed = yaml.load(content)
 
-            // Validate YAML
-            try {
-                yaml.load(content)
-            } catch {
-                return false
-            }
+				// Require actual object-like YAML front matter
+				if (
+					parsed === null ||
+					typeof parsed !== 'object' ||
+					Array.isArray(parsed)
+				) {
+					return false
+				}
+			} catch {
+				return false
+			}
 
-            if (silent) {
-                return true
-            }
+			if (silent) {
+				return true
+			}
 
-            const token = state.push('front_matter', '', 0)
-            token.meta = content
-            token.map = [startLine, nextLine + 1]
+			const token = state.push('front_matter', '', 0)
+			token.meta = content
+			token.map = [startLine, nextLine + 1]
 
-            state.line = nextLine + 1
-            return true
-        },
-    )
+			state.line = nextLine + 1
+
+			return true
+		},
+	)
 }
